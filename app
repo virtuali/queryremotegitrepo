@@ -1,7 +1,7 @@
 #!/usr/bin/php
 <?php
 /**
- *
+ * @author zbigniew.cybulski[at]gmail.com
  */
 namespace App;
 
@@ -25,24 +25,24 @@ const APP_PARAMS = [ // : - required, :: - optional, for details check getopt() 
         APP_HELP_PARAM_NAME => "\t\tdisplay this help"
     ]
 ];
-const APP_DESC_FOOT = PHP_EOL. 'usage example: ' . PHP_EOL .
+const APP_DESC_FOOT = PHP_EOL . 'usage example: ' . PHP_EOL .
     './app -r laravel-shift/laravel-5.3 -b master' . PHP_EOL .
     './app -r atlassian/bitbucketjs -b master --service=bitbucked' . PHP_EOL .
     './app --help';
 
 // app start
-Helpers::validate_php_version();
-Helpers::validate_git_exists();
+Helpers::validatePhpVersion();
+Helpers::validateGitInstalled();
 try {
-    $repo = new Repo(Helpers::get_input_data());
+    $repo = new Repo(Helpers::getInputData());
 } catch (Exception $e) {
-    Helpers::echo_err($e->getMessage());
+    Helpers::echoErr($e->getMessage());
 }
 
 if ($sha = $repo->getLastLommitSha()) {
-    Helpers::echo_info($repo->getLastLommitSha());
+    Helpers::echoInfo($repo->getLastLommitSha());
 } else {
-    Helpers::echo_err('Unknown or empty branch');
+    Helpers::echoErr('Unknown or empty branch');
 }
 exit();
 // app end
@@ -62,10 +62,15 @@ class Repo
 
     public function __construct($args)
     {
-        if (!isset($args['repo']) || !isset($args['branch'])) throw new Exception("Missing repository or branch name");
+        if (!isset($args['repo']) || !isset($args['branch'])) {
+            throw new Exception("Missing repository or branch name");
+        }
 
-        if (!$args['service']) $args['service'] = self::DEFAULT_SERVICE;
-        $this->serviceUrl = self::SERVICES[$args['service']] ?: Helpers::_die('Unsupported service ' . $args['service']);
+        if (!$args['service']) {
+            $args['service'] = self::DEFAULT_SERVICE;
+        }
+        $this->serviceUrl = self::SERVICES[$args['service']] ?:
+            Helpers::killApp('Unsupported service ' . $args['service']);
         $this->setBranch($args['branch']);
         $this->setRepo($args['repo']);
     }
@@ -81,7 +86,7 @@ class Repo
             $this->currentRepo = $name;
             return;
         }
-        Helpers::_die('Unvalid repository name or url ' . $this->serviceUrl . ' is unavailable');
+        Helpers::killApp('Unvalid repository name or url ' . $this->serviceUrl . ' is unavailable');
     }
 
     /**
@@ -95,7 +100,7 @@ class Repo
             $this->currentBranch = $name;
             return;
         }
-        Helpers::_die("Can't set current branch name." . PHP_EOL);
+        Helpers::killApp("Can't set current branch name." . PHP_EOL);
     }
 
     /**
@@ -132,7 +137,7 @@ class Repo
                 return true;
             }
         }
-        Helpers::_die ("Unvalid branch name.");
+        Helpers::killApp("Unvalid branch name.");
     }
 
     protected function validateRepositoryName($name)
@@ -140,7 +145,7 @@ class Repo
         if ($this->validateIsRemoteUrlLive($this->serviceUrl . $name)) {
             return true;
         }
-        Helpers::_die('Remote repository url is unavailable.');
+        Helpers::killApp('Remote repository url is unavailable.');
     }
 
     /**
@@ -150,7 +155,7 @@ class Repo
      * @param array $opts
      * @return bool|mixed
      */
-    protected  function validateIsRemoteUrlLive($url, array $opts = [])
+    protected function validateIsRemoteUrlLive($url, array $opts = [])
     {
         // Store previous default context
         $prev = stream_context_get_options(stream_context_get_default());
@@ -164,31 +169,30 @@ class Repo
 
         // Do the head request
         $headers = @get_headers($url, true);
-        if (!$headers)
+        if (!$headers) {
             return false;
+        }
 
         // Restore previous default context and return
         stream_context_set_default($prev);
 
         preg_match('/\s(\d+)\s/', $headers[0], $matches);
 
-        if (trim($matches[0]) == '200') return true;
+        if (trim($matches[0]) == '200') {
+            return true;
+        }
 
         return false;
     }
-
-    protected function validateIsNotEmptyHEADBranch()
-    {
-
-    }
 }
 
-class Helpers {
+class Helpers
+{
     /**
      * Parse app input data and
      * @return array
      */
-    public static function get_input_data()
+    public static function getInputData()
     {
         $options = implode(array_keys(APP_PARAMS['required']));
         $longopts = explode('@', implode('@', array_keys(APP_PARAMS['optional'])));//array_keys($params['optional']);
@@ -196,41 +200,42 @@ class Helpers {
 
         // check if help was invoked or all required parameters provided
         if (array_key_exists(APP_HELP_PARAM_NAME, $arguments) || !$arguments['r'] || !$arguments['b']) {
-            if (!$arguments['r'] xor !$arguments['b'] ) {
-                Helpers::echo_err('*** There is some problem with paramteres. ***' . PHP_EOL);
+            if (!$arguments['r'] xor !$arguments['b']) {
+                Helpers::echoErr('*** There is some problem with paramteres. ***' . PHP_EOL);
             }
-            Helpers::display_help();
+            Helpers::displayHelp();
             die();
         }
 
         return ['repo' => $arguments['r'], 'branch' => $arguments['b'], 'service' => $arguments['service']];
     }
 
-    public static function display_help()
+    public static function displayHelp()
     {
-        Helpers::echo_info(APP_TITLE . PHP_EOL . 'Required parameters:');
+        Helpers::echoInfo(APP_TITLE . PHP_EOL . 'Required parameters:');
         foreach (APP_PARAMS['required'] as $param => $param_desc) {
-            Helpers::echo_info ('-' . Helpers::sc($param) . $param_desc);
+            Helpers::echoInfo('-' . Helpers::sc($param) . $param_desc);
         }
 
-        Helpers::echo_info ('Optional parameters:');
+        Helpers::echoInfo('Optional parameters:');
         foreach (APP_PARAMS['optional'] as $param => $param_desc) {
-            Helpers::echo_info ('--' . Helpers::sc($param) . $param_desc);
+            Helpers::echoInfo('--' . Helpers::sc($param) . $param_desc);
         }
 
-        Helpers::echo_info(APP_DESC_FOOT);
+        Helpers::echoInfo(APP_DESC_FOOT);
     }
 
     /**
      * Validate git requirements
      * @return void
      */
-    public static function validate_git_exists()
+    public static function validateGitInstalled()
     {
         if ($str = shell_exec('git --version')) {
             $git_data = explode(' ', $str);
-            if ($git_data[0] != 'git' || !is_array(($gitVersion = explode('.', $git_data[2]))) || $gitVersion[0] != MIN_GIT_VERSION) {
-                Helpers::_die('This app requires git ' . MIN_GIT_VERSION . '.*');
+            if ($git_data[0] != 'git' || !is_array(($gitVersion = explode('.', $git_data[2]))) ||
+                $gitVersion[0] != MIN_GIT_VERSION) {
+                Helpers::killApp('This app requires git ' . MIN_GIT_VERSION . '.*');
             }
         }
     }
@@ -239,7 +244,7 @@ class Helpers {
      * Validate php environment
      * @return void
      */
-    public static function validate_php_version()
+    public static function validatePhpVersion()
     {
         $version = explode('.', phpversion());
         if (!defined('PHP_VERSION_ID')) {
@@ -256,10 +261,11 @@ class Helpers {
             if (!defined('PHP_VERSION_ID')) {
                 define('PHP_VERSION_ID', $version[1]);
             }
-            Helpers::echo_info('Your PHP_MAJOR_VERSION:' . PHP_MAJOR_VERSION);
-            Helpers::echo_info('Your PHP_MINOR_VERSION:' . PHP_MINOR_VERSION);
-            Helpers::echo_info('Your PHP_VERSION_ID:' . PHP_VERSION_ID);
-            Helpers::_die('This script requires at least PHP v.' . MIN_PHP_MAJOR_VERSION . '.' . MIN_PHP_RELEASE_VERSION . ' or higher');
+            Helpers::echoInfo('Your PHP_MAJOR_VERSION:' . PHP_MAJOR_VERSION);
+            Helpers::echoInfo('Your PHP_MINOR_VERSION:' . PHP_MINOR_VERSION);
+            Helpers::echoInfo('Your PHP_VERSION_ID:' . PHP_VERSION_ID);
+            Helpers::killApp('This script requires at least PHP v.' . MIN_PHP_MAJOR_VERSION . '.' .
+                MIN_PHP_RELEASE_VERSION . ' or higher');
         }
     }
 
@@ -275,7 +281,7 @@ class Helpers {
     /**
      * @param $str
      */
-    public static function echo_err($str)
+    public static function echoErr($str)
     {
         echo "\033[31m" . $str . PHP_EOL;
     }
@@ -283,7 +289,7 @@ class Helpers {
     /**
      * @param $str
      */
-    public static function echo_info($str)
+    public static function echoInfo($str)
     {
         echo "\033[39m" . $str . PHP_EOL;
     }
@@ -291,7 +297,7 @@ class Helpers {
     /**
      * @param $msg
      */
-    public static function _die($msg)
+    public static function killApp($msg)
     {
         die("\033[31m" . $msg . PHP_EOL);
     }
